@@ -6,7 +6,6 @@ sys.path.append(BIN)
 
 import PyPARIS.communication_helpers as ch
 import numpy as np
-from scipy.constants import c, e
 import PyPARIS.share_segments as shs
 import time
 import pickle
@@ -16,139 +15,45 @@ import h5py
 
 from PyHEADTAIL.particles.slicing import UniformBinSlicer
 
+import Simulation_parameters as pp
 
 
-# machine and beam settings
-
-# n_segments needs to be None if optics_pickle_file is specified
-optics_pickle_file = 'lhc2018_25cm_only_triplets_IR15_b1_optics.pkl'
-n_segments = None
-beta_x =  None
-beta_y =  None
-Q_x = None
-Q_y = None
-
-#~ optics_pickle_file = None
-#~ n_segments = 2
-#~ beta_x =  400.0
-#~ beta_y =  400.0
-#~ Q_x = 62.27
-#~ Q_y = 60.295
-
-N_turns = 1024
-N_turns_target = 1024
-
-n_non_parallelizable = 2 #rf and aperture
-
-
-intensity = 1.25e+11
-epsn_x = 2.5e-6
-epsn_y = 2.5e-6
-
-machine_configuration = 'LHC-collision'
-
-sim_stop_frac = 0.9
-
-octupole_knob = 0.
-Qp_x = 0.
-Qp_y = 0.
-
-n_slices = 50 #150
-n_macroparticles = n_slices*250 #700000
-sigma_z = 1.2e-9/4*c
-
-x_kick_in_sigmas = 0.1
-y_kick_in_sigmas = 0.1
-
-# transverse damper settings
-enable_transverse_damper = False
-dampingrate_x = 100.
-dampingrate_y = 100.
-if enable_transverse_damper: n_non_parallelizable += 1
-
-
-# footprint settings
-footprint_mode = True
-#n_macroparticles_for_footprint_map = 5000000
-n_macroparticles_for_footprint_map = 500000
-n_macroparticles_for_footprint_track = 5000
-
-
-# general e-cloud settings
-Dh_sc_ext = .8e-3
-target_size_internal_grid_sigma = 10.
-target_Dh_internal_grid_sigma = 0.2
-
-chamb_type = 'polyg'
-x_aper = 2.300000e-02
-y_aper = 1.800000e-02
-filename_chm = 'LHC_chm_ver.mat'
-
-z_cut = 2.5e-9/2*c
-
-Dt_ref = 5e-12
-pyecl_input_folder = './pyecloud_config'
-
-
-# dedicated dipole e-cloud settings
-enable_arc_dip = False
-fraction_device_dip = 0.65
-init_unif_edens_flag_dip = 1
-init_unif_edens_dip = 1.000000e+12
-N_MP_ele_init_dip = 500000
-N_mp_max_dip = N_MP_ele_init_dip*4
-B_multip_dip = [8.33] #T
-
-# dedicated quadrupole e-cloud settings
-enable_arc_quad = False
-fraction_device_quad = 7.000000e-02
-N_mp_max_quad = 2000000 
-B_multip_quad = [0., 188.2]
-folder_path = '../../LHC_ecloud_distrib_quads/'
-filename_state =  'not_used_enable_arc_quad_is_off'
-filename_init_MP_state_quad = folder_path + filename_state
-
-# dedicated quadrupole _kick_element_ settings
-enable_eclouds_at_kick_elements = True
-path_buildup_simulations_kick_elements = '/home/kparasch/workspace/Triplets/ec_headtail_triplets/simulations_PyECLOUD/!!!NAME!!!_sey1.35'
-name_MP_state_file_kick_elements = 'MP_state_9.mat'
-orbit_factor = 6.250000e-01
 
 class Simulation(object):
     def __init__(self):
-        self.N_turns = N_turns
+        self.N_turns = pp.N_turns
 
     def init_all(self):
 
-        self.n_slices = n_slices
+        self.n_slices = pp.n_slices
     
         
         # read the optics if needed
-        if optics_pickle_file is not None:
-            with open(optics_pickle_file) as fid:
+        if pp.optics_pickle_file is not None:
+            with open(pp.optics_pickle_file) as fid:
                 optics = pickle.load(fid)
                 self.n_kick_smooth = np.sum(['_kick_smooth_' in nn for nn in optics['name']])
         else:
             optics=None
-            self.n_kick_smooth = n_segments
+            self.n_kick_smooth = pp.n_segments
 
         # define the machine
         from LHC_custom import LHC
-        self.machine = LHC(n_segments = n_segments, machine_configuration = machine_configuration,
-                        beta_x=beta_x, beta_y=beta_y,
-                        accQ_x=Q_x, accQ_y=Q_y,
-                        Qp_x=Qp_x, Qp_y=Qp_y,
-                        octupole_knob=octupole_knob, 
+        self.machine = LHC(n_segments = pp.n_segments, machine_configuration = pp.machine_configuration,
+                        beta_x=pp.beta_x, beta_y=pp.beta_y,
+                        accQ_x=pp.Q_x, accQ_y=pp.Q_y,
+                        Qp_x=pp.Qp_x, Qp_y=pp.Qp_y,
+                        octupole_knob=pp.octupole_knob, 
                         optics_dict=optics)
         self.n_segments = self.machine.transverse_map.n_segments
         
         # compute sigma
         inj_opt = self.machine.transverse_map.get_injection_optics()
-        sigma_x_inj = np.sqrt(inj_opt['beta_x']*epsn_x/self.machine.betagamma)
-        sigma_y_inj = np.sqrt(inj_opt['beta_y']*epsn_y/self.machine.betagamma)
+        sigma_x_inj = np.sqrt(inj_opt['beta_x']*pp.epsn_x/self.machine.betagamma)
+        sigma_y_inj = np.sqrt(inj_opt['beta_y']*pp.epsn_y/self.machine.betagamma)
         
         
-        if optics_pickle_file is None:
+        if pp.optics_pickle_file is None:
             sigma_x_smooth = sigma_x_inj
             sigma_y_smooth = sigma_y_inj
         else:
@@ -168,66 +73,66 @@ class Simulation(object):
                 sigma_x_smooth = None
                 sigma_y_smooth = None
             else:
-                sigma_x_smooth = np.sqrt(beta_x_smooth*epsn_x/self.machine.betagamma)
-                sigma_y_smooth = np.sqrt(beta_y_smooth*epsn_y/self.machine.betagamma)
+                sigma_x_smooth = np.sqrt(beta_x_smooth*pp.epsn_x/self.machine.betagamma)
+                sigma_y_smooth = np.sqrt(beta_y_smooth*pp.epsn_y/self.machine.betagamma)
 
         # define MP size
-        nel_mp_ref_0 = init_unif_edens_dip*4*x_aper*y_aper/N_MP_ele_init_dip
+        nel_mp_ref_0 = pp.init_unif_edens_dip*4*pp.x_aper*pp.y_aper/pp.N_MP_ele_init_dip
         
         # prepare e-cloud
         import PyECLOUD.PyEC4PyHT as PyEC4PyHT
         
-        if enable_arc_dip:
+        if pp.enable_arc_dip:
             ecloud_dip = PyEC4PyHT.Ecloud(slice_by_slice_mode=True,
-                            L_ecloud=self.machine.circumference/self.n_kick_smooth*fraction_device_dip, slicer=None, 
-                            Dt_ref=Dt_ref, pyecl_input_folder=pyecl_input_folder,
-                            chamb_type = chamb_type,
-                            x_aper=x_aper, y_aper=y_aper,
-                            filename_chm=filename_chm, 
-                            Dh_sc=Dh_sc_ext,
+                            L_ecloud=self.machine.circumference/self.n_kick_smooth*pp.fraction_device_dip, slicer=None, 
+                            Dt_ref=pp.Dt_ref, pyecl_input_folder=pp.pyecl_input_folder,
+                            chamb_type = pp.chamb_type,
+                            x_aper=pp.x_aper, y_aper=pp.y_aper,
+                            filename_chm=pp.filename_chm, 
+                            Dh_sc=pp.Dh_sc_ext,
                             PyPICmode = 'ShortleyWeller_WithTelescopicGrids',
                             f_telescope = 0.3,
-                            target_grid = {'x_min_target':-target_size_internal_grid_sigma*sigma_x_smooth, 'x_max_target':target_size_internal_grid_sigma*sigma_x_smooth,
-                                           'y_min_target':-target_size_internal_grid_sigma*sigma_y_smooth,'y_max_target':target_size_internal_grid_sigma*sigma_y_smooth,
-                                           'Dh_target':target_Dh_internal_grid_sigma*sigma_x_smooth},
+                            target_grid = {'x_min_target':-pp.target_size_internal_grid_sigma*sigma_x_smooth, 'x_max_target':pp.target_size_internal_grid_sigma*sigma_x_smooth,
+                                           'y_min_target':-pp.target_size_internal_grid_sigma*sigma_y_smooth, 'y_max_target':pp.target_size_internal_grid_sigma*sigma_y_smooth,
+                                           'Dh_target':pp.target_Dh_internal_grid_sigma*sigma_x_smooth},
                             N_nodes_discard = 5.,
                             N_min_Dh_main = 10,
-                            init_unif_edens_flag=init_unif_edens_flag_dip,
-                            init_unif_edens=init_unif_edens_dip, 
-                            N_mp_max=N_mp_max_dip,
+                            init_unif_edens_flag=pp.init_unif_edens_flag_dip,
+                            init_unif_edens=pp.init_unif_edens_dip, 
+                            N_mp_max=pp.N_mp_max_dip,
                             nel_mp_ref_0=nel_mp_ref_0,
-                            B_multip=B_multip_dip)
+                            B_multip=pp.B_multip_dip)
                         
-        if enable_arc_quad:               
+        if pp.enable_arc_quad:               
             ecloud_quad = PyEC4PyHT.Ecloud(slice_by_slice_mode=True,
-                            L_ecloud=self.machine.circumference/self.n_kick_smooth*fraction_device_quad, slicer=None, 
-                            Dt_ref=Dt_ref, pyecl_input_folder=pyecl_input_folder,
-                            chamb_type = chamb_type,
-                            x_aper=x_aper, y_aper=y_aper,
-                            filename_chm=filename_chm, 
-                            Dh_sc=Dh_sc_ext,
+                            L_ecloud=self.machine.circumference/self.n_kick_smooth*pp.fraction_device_quad, slicer=None, 
+                            Dt_ref=pp.Dt_ref, pyecl_input_folder=pp.pyecl_input_folder,
+                            chamb_type = pp.chamb_type,
+                            x_aper=pp.x_aper, y_aper=pp.y_aper,
+                            filename_chm=pp.filename_chm, 
+                            Dh_sc=pp.Dh_sc_ext,
                             PyPICmode = 'ShortleyWeller_WithTelescopicGrids',
                             f_telescope = 0.3,
-                            target_grid = {'x_min_target':-target_size_internal_grid_sigma*sigma_x_smooth, 'x_max_target':target_size_internal_grid_sigma*sigma_x_smooth,
-                                           'y_min_target':-target_size_internal_grid_sigma*sigma_y_smooth,'y_max_target':target_size_internal_grid_sigma*sigma_y_smooth,
-                                           'Dh_target':target_Dh_internal_grid_sigma*sigma_x_smooth},
+                            target_grid = {'x_min_target':-pp.target_size_internal_grid_sigma*sigma_x_smooth, 'x_max_target':pp.target_size_internal_grid_sigma*sigma_x_smooth,
+                                           'y_min_target':-pp.target_size_internal_grid_sigma*sigma_y_smooth, 'y_max_target':pp.target_size_internal_grid_sigma*sigma_y_smooth,
+                                           'Dh_target':pp.target_Dh_internal_grid_sigma*sigma_x_smooth},
                             N_nodes_discard = 5.,
                             N_min_Dh_main = 10,
-                            N_mp_max=N_mp_max_quad,
+                            N_mp_max=pp.N_mp_max_quad,
                             nel_mp_ref_0=nel_mp_ref_0,
                             B_multip=B_multip_quad,
-                            filename_init_MP_state=filename_init_MP_state_quad)
+                            filename_init_MP_state=pp.filename_init_MP_state_quad)
 
 
                         
-        if self.ring_of_CPUs.I_am_the_master and enable_arc_dip:
+        if self.ring_of_CPUs.I_am_the_master and pp.enable_arc_dip:
             with open('multigrid_config_dip.txt', 'w') as fid:
                 fid.write(repr(ecloud_dip.spacech_ele.PyPICobj.grids))
             
             with open('multigrid_config_dip.pkl', 'w') as fid:
                 pickle.dump(ecloud_dip.spacech_ele.PyPICobj.grids, fid)
                 
-        if self.ring_of_CPUs.I_am_the_master and enable_arc_quad:
+        if self.ring_of_CPUs.I_am_the_master and pp.enable_arc_quad:
             with open('multigrid_config_quad.txt', 'w') as fid:
                 fid.write(repr(ecloud_quad.spacech_ele.PyPICobj.grids))
             
@@ -237,21 +142,21 @@ class Simulation(object):
 
         # setup transverse losses (to "protect" the ecloud)
         import PyHEADTAIL.aperture.aperture as aperture
-        apt_xy = aperture.EllipticalApertureXY(x_aper=target_size_internal_grid_sigma*sigma_x_inj, 
-                                               y_aper=target_size_internal_grid_sigma*sigma_y_inj)
+        apt_xy = aperture.EllipticalApertureXY(x_aper=pp.target_size_internal_grid_sigma*sigma_x_inj, 
+                                               y_aper=pp.target_size_internal_grid_sigma*sigma_y_inj)
         self.machine.one_turn_map.append(apt_xy)
         
         
-        if enable_transverse_damper:
+        if pp.enable_transverse_damper:
             # setup transverse damper
             from PyHEADTAIL.feedback.transverse_damper import TransverseDamper
-            damper = TransverseDamper(dampingrate_x=dampingrate_x, dampingrate_y=dampingrate_y)
+            damper = TransverseDamper(dampingrate_x=pp.dampingrate_x, dampingrate_y=pp.dampingrate_y)
             self.machine.one_turn_map.append(damper)
 
 
 
         # We suppose that all the object that cannot be slice parallelized are at the end of the ring
-        i_end_parallel = len(self.machine.one_turn_map)-n_non_parallelizable
+        i_end_parallel = len(self.machine.one_turn_map)-pp.n_non_parallelizable
 
         # split the machine
         sharing = shs.ShareSegments(i_end_parallel, self.ring_of_CPUs.N_nodes)
@@ -270,51 +175,51 @@ class Simulation(object):
         for ele in self.mypart:
             my_new_part.append(ele)
             if ele in self.machine.transverse_map:
-                if optics_pickle_file is None or '_kick_smooth_' in ele.name1:
-                    if enable_arc_dip:
+                if pp.optics_pickle_file is None or '_kick_smooth_' in ele.name1:
+                    if pp.enable_arc_dip:
                         ecloud_dip_new = ecloud_dip.generate_twin_ecloud_with_shared_space_charge()
                         my_new_part.append(ecloud_dip_new)
                         self.my_list_eclouds.append(ecloud_dip_new)
-                    if enable_arc_quad:
+                    if pp.enable_arc_quad:
                         ecloud_quad_new = ecloud_quad.generate_twin_ecloud_with_shared_space_charge()
                         my_new_part.append(ecloud_quad_new)
                         self.my_list_eclouds.append(ecloud_quad_new)
-                elif '_kick_element_' in ele.name1 and enable_eclouds_at_kick_elements:
+                elif '_kick_element_' in ele.name1 and pp.enable_eclouds_at_kick_elements:
                     
                     i_in_optics = list(optics['name']).index(ele.name1)
                     kick_name = optics['name'][i_in_optics]
                     element_name = kick_name.split('_kick_element_')[-1]
                     L_curr = optics['L_interaction'][i_in_optics]
                     
-                    buildup_folder = path_buildup_simulations_kick_elements.replace('!!!NAME!!!', element_name)
+                    buildup_folder = pp.path_buildup_simulations_kick_elements.replace('!!!NAME!!!', element_name)
                     chamber_fname = '%s_chamber.mat'%(element_name)
                     
                     B_multip_curr = [0., optics['gradB'][i_in_optics]]
                     
-                    x_beam_offset = optics['x'][i_in_optics]*orbit_factor
-                    y_beam_offset = optics['y'][i_in_optics]*orbit_factor
+                    x_beam_offset = optics['x'][i_in_optics]*pp.orbit_factor
+                    y_beam_offset = optics['y'][i_in_optics]*pp.orbit_factor
                     
-                    sigma_x_local = np.sqrt(optics['beta_x'][i_in_optics]*epsn_x/self.machine.betagamma)
-                    sigma_y_local = np.sqrt(optics['beta_y'][i_in_optics]*epsn_y/self.machine.betagamma)
+                    sigma_x_local = np.sqrt(optics['beta_x'][i_in_optics]*pp.epsn_x/self.machine.betagamma)
+                    sigma_y_local = np.sqrt(optics['beta_y'][i_in_optics]*pp.epsn_y/self.machine.betagamma)
                     
                     ecloud_ele = PyEC4PyHT.Ecloud(slice_by_slice_mode=True,
                             L_ecloud=L_curr, slicer=None, 
-                            Dt_ref=Dt_ref, pyecl_input_folder=pyecl_input_folder,
+                            Dt_ref=pp.Dt_ref, pyecl_input_folder=pp.pyecl_input_folder,
                             chamb_type = 'polyg',
                             x_aper=None, y_aper=None,
                             filename_chm=buildup_folder+'/'+chamber_fname, 
-                            Dh_sc=Dh_sc_ext,
+                            Dh_sc=pp.Dh_sc_ext,
                             PyPICmode = 'ShortleyWeller_WithTelescopicGrids',
                             f_telescope = 0.3,
-                            target_grid = {'x_min_target':-target_size_internal_grid_sigma*sigma_x_local+x_beam_offset, 'x_max_target':target_size_internal_grid_sigma*sigma_x_local+x_beam_offset,
-                                           'y_min_target':-target_size_internal_grid_sigma*sigma_y_local+y_beam_offset, 'y_max_target':target_size_internal_grid_sigma*sigma_y_local+y_beam_offset,
-                                           'Dh_target':target_Dh_internal_grid_sigma*sigma_y_local},
+                            target_grid = {'x_min_target':-pp.target_size_internal_grid_sigma*sigma_x_local+x_beam_offset, 'x_max_target':pp.target_size_internal_grid_sigma*sigma_x_local+x_beam_offset,
+                                           'y_min_target':-pp.target_size_internal_grid_sigma*sigma_y_local+y_beam_offset, 'y_max_target':pp.target_size_internal_grid_sigma*sigma_y_local+y_beam_offset,
+                                           'Dh_target':pp.target_Dh_internal_grid_sigma*sigma_y_local},
                             N_nodes_discard=5.,
                             N_min_Dh_main=10,
-                            N_mp_max=N_mp_max_quad,
+                            N_mp_max=pp.N_mp_max_quad,
                             nel_mp_ref_0=nel_mp_ref_0,
                             B_multip=B_multip_curr,
-                            filename_init_MP_state=buildup_folder+'/'+name_MP_state_file_kick_elements, 
+                            filename_init_MP_state=buildup_folder+'/'+pp.name_MP_state_file_kick_elements, 
                             x_beam_offset=x_beam_offset,
                             y_beam_offset=y_beam_offset)   
                             
@@ -323,15 +228,15 @@ class Simulation(object):
                 
         self.mypart = my_new_part
 
-        if footprint_mode:
+        if pp.footprint_mode:
             print 'Proc. %d computing maps'%myid
             # generate a bunch 
             bunch_for_map=self.machine.generate_6D_Gaussian_bunch_matched(
-                        n_macroparticles=n_macroparticles_for_footprint_map, intensity=intensity, 
-                        epsn_x=epsn_x, epsn_y=epsn_y, sigma_z=sigma_z)
+                        n_macroparticles=pp.n_macroparticles_for_footprint_map, intensity=pp.intensity, 
+                        epsn_x=pp.epsn_x, epsn_y=pp.epsn_y, sigma_z=pp.sigma_z)
 
             # Slice the bunch
-            slicer_for_map = UniformBinSlicer(n_slices = n_slices, z_cuts=(-z_cut, z_cut))
+            slicer_for_map = UniformBinSlicer(n_slices = pp.n_slices, z_cuts=(-pp.z_cut, pp.z_cut))
             slices_list_for_map = bunch_for_map.extract_slices(slicer_for_map)
             
             
@@ -378,34 +283,34 @@ class Simulation(object):
     def init_master(self):
         
         # Manage multi-job operation
-        if footprint_mode:
-            if N_turns!=N_turns_target:
+        if pp.footprint_mode:
+            if pp.N_turns!=pp.N_turns_target:
                 raise ValueError('In footprint mode you need to set N_turns_target=N_turns_per_run!')
         
         import Save_Load_Status as SLS
-        SimSt = SLS.SimulationStatus(N_turns_per_run=N_turns, check_for_resubmit = True, N_turns_target=N_turns_target)
+        SimSt = SLS.SimulationStatus(N_turns_per_run=pp.N_turns, check_for_resubmit = True, N_turns_target=pp.N_turns_target)
         SimSt.before_simulation()
         self.SimSt = SimSt
 
         # generate a bunch 
-        if footprint_mode:
+        if pp.footprint_mode:
             self.bunch = self.machine.generate_6D_Gaussian_bunch_matched(
-                n_macroparticles=n_macroparticles_for_footprint_track, intensity=intensity, 
-                epsn_x=epsn_x, epsn_y=epsn_y, sigma_z=sigma_z)
+                n_macroparticles=pp.n_macroparticles_for_footprint_track, intensity=pp.intensity, 
+                epsn_x=pp.epsn_x, epsn_y=pp.epsn_y, sigma_z=pp.sigma_z)
         elif SimSt.first_run:
             self.bunch = self.machine.generate_6D_Gaussian_bunch_matched(
-                            n_macroparticles=n_macroparticles, intensity=intensity, 
-                            epsn_x=epsn_x, epsn_y=epsn_y, sigma_z=sigma_z)
+                            n_macroparticles=pp.n_macroparticles, intensity=pp.intensity, 
+                            epsn_x=pp.epsn_x, epsn_y=pp.epsn_y, sigma_z=pp.sigma_z)
             
             # compute initial displacements
             inj_opt = self.machine.transverse_map.get_injection_optics()
-            sigma_x = np.sqrt(inj_opt['beta_x']*epsn_x/self.machine.betagamma)
-            sigma_y = np.sqrt(inj_opt['beta_y']*epsn_y/self.machine.betagamma)
-            x_kick = x_kick_in_sigmas*sigma_x
-            y_kick = y_kick_in_sigmas*sigma_y
+            sigma_x = np.sqrt(inj_opt['beta_x']*pp.epsn_x/self.machine.betagamma)
+            sigma_y = np.sqrt(inj_opt['beta_y']*pp.epsn_y/self.machine.betagamma)
+            x_kick = pp.x_kick_in_sigmas*sigma_x
+            y_kick = pp.y_kick_in_sigmas*sigma_y
             
             # apply initial displacement
-            if not footprint_mode:
+            if not pp.footprint_mode:
                 self.bunch.x += x_kick
                 self.bunch.y += y_kick
             
@@ -417,18 +322,18 @@ class Simulation(object):
             print 'Bunch loaded from file.'
 
         # initial slicing
-        self.slicer = UniformBinSlicer(n_slices = n_slices, z_cuts=(-z_cut, z_cut))
+        self.slicer = UniformBinSlicer(n_slices = pp.n_slices, z_cuts=(-pp.z_cut, pp.z_cut))
 
         # define a bunch monitor 
         from PyHEADTAIL.monitors.monitors import BunchMonitor
         self.bunch_monitor = BunchMonitor('bunch_evolution_%02d'%self.SimSt.present_simulation_part,
-                            N_turns, {'Comment':'PyHDTL simulation'}, 
+                            pp.N_turns, {'Comment':'PyHDTL simulation'}, 
                             write_buffer_every = 3)
         
         # define a slice monitor 
         from PyHEADTAIL.monitors.monitors import SliceMonitor
         self.slice_monitor = SliceMonitor('slice_evolution_%02d'%self.SimSt.present_simulation_part,
-                            N_turns, self.slicer,  {'Comment':'PyHDTL simulation'}, 
+                            pp.N_turns, self.slicer,  {'Comment':'PyHDTL simulation'}, 
                             write_buffer_every = 3)
         
         #slice for the first turn
@@ -438,8 +343,8 @@ class Simulation(object):
         
         print 'N_turns', self.N_turns
         
-        if footprint_mode:
-            self.recorded_particles = ParticleTrajectories(n_macroparticles_for_footprint_track, self.N_turns)
+        if pp.footprint_mode:
+            self.recorded_particles = ParticleTrajectories(pp.n_macroparticles_for_footprint_track, self.N_turns)
 
         return pieces_to_be_treated
 
@@ -470,11 +375,11 @@ class Simulation(object):
         # order reset of all clouds
         orders_to_pass = ['reset_clouds']
         
-        if footprint_mode:
+        if pp.footprint_mode:
             self.recorded_particles.dump(self.bunch)
         
         # check if simulation has to be stopped
-        if not footprint_mode and self.bunch.macroparticlenumber < sim_stop_frac * n_macroparticles:
+        if not pp.footprint_mode and self.bunch.macroparticlenumber < pp.sim_stop_frac * pp.n_macroparticles:
             orders_to_pass.append('stop')
             self.SimSt.check_for_resubmit = False
             print 'Stop simulation due to beam losses.'
@@ -489,7 +394,7 @@ class Simulation(object):
 
         
     def finalize_simulation(self):
-        if footprint_mode:
+        if pp.footprint_mode:
             # Tunes
 
             import NAFFlib
