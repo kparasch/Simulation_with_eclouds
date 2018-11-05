@@ -1,17 +1,19 @@
 #!/bin/bash
 
-#BSUB -J tri_0011
+#BSUB -J inoct_0014
 #BSUB -o %J.out
 #BSUB -e %J.err
 #BSUB -N
 #BSUB -B
-#BSUB -q spacecharge
+#BSUB -q hpc_inf
 #B -a openmpi
-#BSUB -n 4
-#BSUB -R span[ptile=4]
+#BSUB -n 8
+#BSUB -R span[ptile=8]
 
-#export PYTHONPATH=/home/giadarol/Desktop/PyPARIS_multibunch_development:$PYTHONPATH
-rm simulation_status.sta 
+source setup_env_cnaf
 
-#python /home/kparasch/Builds/PyPARIS/multiprocexec.py -n 4 sim_class=Simulation_with_eclouds.Simulation
-python /home/kparasch/Builds/PyPARIS/serialexec.py sim_class=Simulation_with_eclouds.Simulation
+CURRDIR=/home/HPC/aromano/sim_workspace_cnaf/033_LHC_instab_dip_and_quad_edens_scan_6p5TeV_octupoles/simulations/edens_10.00e11_ecdipON_ecquadON
+cd $CURRDIR
+pwd
+
+stdbuf -oL python ../../../PyPARIS/multiprocexec.py -n 8 sim_class=Simulation_with_eclouds.Simulation >> opic.txt 2>> epic.txt
